@@ -5,7 +5,7 @@ import cv2
 import tensorflow as tf
 from tensorflow.keras.applications import ResNet50
 from tensorflow.keras.models import Model
-from tensorflow.keras.layers import Dense, Flatten, Dropout
+from tensorflow.keras.layers import Dense, GlobalAveragePooling2D, Dropout
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
@@ -13,13 +13,21 @@ import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import confusion_matrix, classification_report
 import datetime
+import argparse
+import gc
 
 # 📁 مسیر دیتاست (حتماً آن را به مسیر واقعی خود تغییر دهید)
 DATASET_PATH = "/content/brats2020/BraTS2020_TrainingData/MICCAI_BraTS2020_TrainingData"
-use_nifti = True  # تغییر این متغیر برای انتخاب نوع داده
+if not os.path.exists(DATASET_PATH):
+    raise FileNotFoundError(f"Dataset path not found: {DATASET_PATH}")
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--use_nifti', type=bool, default=True, help='Use NIfTI files or not')
+args = parser.parse_args()
+use_nifti = args.use_nifti  # تغییر این متغیر برای انتخاب نوع داده
 
 # 📥 تابع خواندن و پردازش MRI
-def load_mri_image(file_path, target_size=(128, 128)):
+def load_mri_image(file_path, target_size=(224, 224)):
     img = nib.load(file_path).get_fdata()
     img = np.mean(img, axis=-1)  # تبدیل به تصویر تک‌کاناله (Grayscale)
     img = cv2.resize(img, target_size)
@@ -39,19 +47,22 @@ if use_nifti:
         t1_path = os.path.join(folder_path, f"{folder}_t1.nii")
         flair_path = os.path.join(folder_path, f"{folder}_flair.nii")
 
-        if os.path.exists(t1_path) and os.path.exists(flair_path):
-            img_t1 = load_mri_image(t1_path)
-            img_flair = load_mri_image(flair_path)
-            img_combined = (img_t1 + img_flair) / 2
+        if not os.path.exists(t1_path) or not os.path.exists(flair_path):
+            print(f"Missing files for {folder}, skipping.")
+            continue
 
-            X.append(img_combined)
-            y.append(1 if "HGG" in folder else 0)
+        img_t1 = load_mri_image(t1_path)
+        img_flair = load_mri_image(flair_path)
+        img_combined = (img_t1 + img_flair) / 2
+
+        X.append(img_combined)
+        y.append(1 if "HGG" in folder else 0)
 
 else:
     # بارگذاری داده‌ها از دایرکتوری‌های تصویری
     datagen = ImageDataGenerator(rescale=1./255)
-    generator = datagen.flow_from_directory(DATASET_PATH, target_size=(128, 128),
-                                            class_mode='binary', batch_size=4)
+    generator = datagen.flow_from_directory(DATASET_PATH, target_size=(224, 224),
+                                            class_mode='categorical', batch_size=4)
 
     for _ in range(len(generator)):
         img, label = generator.next()
@@ -71,21 +82,21 @@ np.save("X_test.npy", X_test)
 np.save("y_test.npy", y_test)
 print("✅ X_test and y_test saved successfully!")
 
-# 🧩 ساخت مدل با ResNet50 (ورودی 128×128)
-base_model = ResNet50(weights="imagenet", include_top=False, input_shape=(128, 128, 3))
+# 🧩 ساخت مدل با ResNet50 (ورودی 224×224)
+base_model = ResNet50(weights="imagenet", include_top=False, input_shape=(224, 224, 3))
 
 # ❄️ فریز کردن لایه‌های اولیه
 for layer in base_model.layers:
     layer.trainable = False
 
 # 🔧 اضافه کردن لایه‌های Dense بالای مدل پایه
-x = Flatten()(base_model.output)
-x = Dense(128, activation="relu")(x)
+x = GlobalAveragePooling2D()(base_model.output)
+x = Dense(1024, activation="relu")(x)
 x = Dropout(0.5)(x)
-x = Dense(1, activation="sigmoid")(x)
+x = Dense(2, activation="softmax")(x)
 
 model = Model(inputs=base_model.input, outputs=x)
-model.compile(optimizer=Adam(learning_rate=1e-4), loss="binary_crossentropy", metrics=["accuracy"])
+model.compile(optimizer=Adam(learning_rate=1e-4), loss="categorical_crossentropy", metrics=["accuracy"])
 
 # 📈 تنظیمات برای EarlyStopping و ModelCheckpoint
 early_stopping = EarlyStopping(monitor='val_loss', patience=5, restore_best_weights=True)
@@ -123,6 +134,7 @@ plt.xlabel("Epoch")
 plt.ylabel("Accuracy")
 plt.legend()
 plt.grid(True)
+plt.savefig("images/accuracy_plot.png")  # قبل از plt.show()
 
 # Loss
 plt.subplot(1, 2, 2)
@@ -133,13 +145,14 @@ plt.xlabel("Epoch")
 plt.ylabel("Loss")
 plt.legend()
 plt.grid(True)
+plt.savefig("images/loss_plot.png")
 
 plt.show()
 
 # 📊 نمایش confusion matrix و classification report
-y_pred = (model.predict(X_test) > 0.5).astype("int32")
-conf_matrix = confusion_matrix(y_test, y_pred)
-class_report = classification_report(y_test, y_pred)
+y_pred = np.argmax(model.predict(X_test), axis=-1)
+conf_matrix = confusion_matrix(np.argmax(y_test, axis=-1), y_pred)
+class_report = classification_report(np.argmax(y_test, axis=-1), y_pred)
 
 print("Confusion Matrix:\n", conf_matrix)
 print("Classification Report:\n", class_report)
@@ -163,3 +176,9 @@ with open("evaluation_results.txt", "a") as f:
 timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
 model.save(f"saved_model/brain_tumor_classifier_{timestamp}")
 print(f"✅ Time-stamped model saved to saved_model/brain_tumor_classifier_{timestamp}")
+
+# مدیریت حافظه
+tf.keras.backend.clear_session()
+gc.collect()
+
+print(f"✅ All tasks completed successfully. Final accuracy: {accuracy*100:.2f}%")
