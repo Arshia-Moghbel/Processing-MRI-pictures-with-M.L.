@@ -1,160 +1,83 @@
-# Processing-MRI-pictures-with-M.L.
+# MRI Classification with ResNet50
 
-GitHub README برای پروژه تشخیص تومور مغزی با ResNet50
+An executable baseline for **labelled** brain-MRI classification. It trains a
+frozen ResNet50 classifier, creates a stratified validation split, saves the
+best/final model, metrics, and training plot in an output directory.
 
-# Brain Tumor Classification using ResNet50
+> This is a research/education project, not a clinical diagnostic tool. Never
+> use its predictions for patient care without appropriate validation,
+> governance, and regulatory review.
 
-This project implements a **Convolutional Neural Network (CNN)** for classifying brain tumor images using **ResNet50** architecture. The model leverages **Transfer Learning** and is trained on both MRI images in `.nii` format and standard image datasets. The goal is to distinguish between healthy and tumorous brain tissues.
+## Important data note
 
-## Table of Contents
-- [Installation](#installation)
-- [Usage](#usage)
-- [Model Overview](#model-overview)
-- [Data Preprocessing](#data-preprocessing)
-- [Training and Evaluation](#training-and-evaluation)
-- [Results](#results)
-- [Model Saving and Deployment](#model-saving-and-deployment)
-- [📤 Data Access via Google Drive](#data-access-via-google-drive)
-- [License](#license)
+BraTS 2020 is a tumour dataset: subject directory names such as
+`BraTS20_Training_001` do not identify HGG/LGG, and the dataset does not supply
+healthy controls. A binary "tumour/no tumour" model cannot be trained from
+those folder names. For classification, supply an auditable label manifest; for
+BraTS tumour masks, build a segmentation workflow instead.
 
-## Installation
-
-Clone the repository and install the necessary dependencies:
+## Setup
 
 ```bash
-git clone https://github.com/yourusername/brain-tumor-classification.git
-cd brain-tumor-classification
+python -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
-
-Dependencies:
-	•	TensorFlow
-	•	Keras
-	•	NumPy
-	•	Matplotlib
-	•	scikit-learn
-	•	nibabel
-	•	OpenCV
-	•	Seaborn
-
-Usage
-
-To train the model, you can use the hybrid_brain_tumor_classifier.py script. Simply choose the input data format by setting the use_nifti variable:
-	•	Set use_nifti = True for NIfTI files (.nii)
-	•	Set use_nifti = False to use images from directory structure (train, val, test folders)
-
-Example:
-
-python hybrid_brain_tumor_classifier.py
-
-This will start training using the dataset in the specified directory. The model will be saved as brain_tumor_classifier in the saved_model directory and also as a TFLite model (brain_tumor_classifier.tflite) for edge devices.
-
-Model Overview
-
-The model uses the ResNet50 architecture pre-trained on ImageNet, with a custom top layer for binary classification (tumor or no tumor). The base layers of ResNet50 are frozen, and the model is fine-tuned to the brain tumor classification task.
-
-Architecture:
-	•	Base Model: ResNet50 (pre-trained)
-	•	Top Layer:
-	•	Global Average Pooling
-	•	Dense Layer (1024 units, ReLU activation)
-	•	Output Layer (2 units for binary classification)
-
-Data Preprocessing
-
-The dataset can either be loaded from:
-	1.	NIfTI (.nii) files: MRI scans are loaded and preprocessed using the nibabel library.
-	2.	Image Files: Data augmentation is applied using ImageDataGenerator for better generalization.
-
-The images are resized to 224x224 pixels, and pixel values are normalized for model input.
-
-Training and Evaluation
-	•	The model is trained using categorical cross-entropy loss and accuracy as the metric.
-	•	EarlyStopping and ModelCheckpoint callbacks are used for efficient training and to prevent overfitting.
-	•	Before execution, ensure the dataset path exists:
-	```python
-	if not os.path.exists(DATASET_PATH):
-	    raise FileNotFoundError(f"Dataset path not found: {DATASET_PATH}")
-	```
-	•	After training, the model is evaluated on a test set, and classification results are saved in a text file.
-
-Results
-
-The model provides:
-	•	Classification Report: Precision, Recall, F1-Score, etc.
-	•	Confusion Matrix: Visual representation of model performance.
-	•	Accuracy Plot: Shows the training and validation accuracy over epochs.
-	•	Loss Plot: Shows the training and validation loss over epochs.
-
-Example output:
-
-Test accuracy: 92.5%
-Confusion Matrix:
-[[200   5]
- [  7 188]]
-Classification Report:
-              precision    recall  f1-score   support
-        0       0.97      0.98      0.97       205
-        1       0.97      0.96      0.97       195
-
-## Visualization
-  
-The following plots are generated during training:
-  
-![Accuracy Plot](images/accuracy_plot.png)
-![Loss Plot](images/loss_plot.png)
-  
-You can generate them by running the training script, which automatically displays and optionally saves them.
-
-Model Saving and Deployment
-	•	The trained model is saved in both TensorFlow SavedModel format (saved_model/brain_tumor_classifier) and TFLite format (brain_tumor_classifier.tflite) for deployment to mobile or edge devices.
-	•	You can load the model as follows:
-
-model = tf.keras.models.load_model('saved_model/brain_tumor_classifier')
-
-## 📤 Data Access via Google Drive
-
-If you want to train this model using Google Colab and access the BraTS2020 dataset from your own Google Drive:
-  
-```python
-from google.colab import drive
-drive.mount('/content/drive')
-DATASET_PATH = "/content/drive/MyDrive/path_to_your_dataset"
 ```
-  
-Replace `path_to_your_dataset` with the actual location of your dataset in Google Drive. Ensure proper permissions and structure (either .nii files or image folders) before training.
 
-License
+## Train from ordinary images
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+Use one immediate folder per class. Class names are taken from folder names.
 
-⸻
+```text
+data/
+  no_tumor/scan_001.png
+  tumor/scan_002.png
+```
 
-📝 Additional Notes:
-	•	You can easily deploy this model for mobile or embedded devices using the TFLite model.
-	•	The dataset used in this project is the BraTS 2020 dataset, which can be found here.
-	•	If using .nii files, ensure you have the necessary libraries installed for loading NIfTI formats. If using directory structure, ensure it follows the train, val, test format with respective images in each folder.
-	•	The evaluation results can be found in the `evaluation_results.txt` file after training.
-	•	To optimize reading .nii files, you can check for missing files:
-	```python
-	if not os.path.exists(t1_path) or not os.path.exists(flair_path):
-	    print(f"Missing files for {folder}, skipping.")
-	    continue
-	```
-	•	At the end of the script, manage memory with:
-	```python
-	import gc
-	tf.keras.backend.clear_session()
-	gc.collect()
-	```
-	•	Log the completion status:
-	```python
-	print(f"✅ All tasks completed successfully. Final accuracy: {accuracy*100:.2f}%")
-	```
+```bash
+python Brain_Tumor_CNN.py --data-mode image --dataset-path data --epochs 20
+```
 
----
+## Train from NIfTI
 
-### 📄 دستورالعمل‌های تکمیلی:
-- **شات‌های پروژه**: می‌توانید تصاویری از نمودارها و گراف‌های دقت و خسارت را در این README قرار دهید تا آن را بیشتر جذاب کنید.
-- **لینک‌های مستقیم**: اگر پروژه به اینترنت نیاز دارد (برای دانلود داده‌ها یا استفاده از مدل‌های ذخیره‌شده)، می‌توانید لینک‌ها را در بخش‌های مربوطه اضافه کنید.
+Use a CSV with `path,label` columns. Relative paths are resolved from
+`--dataset-path`; `.nii` and `.nii.gz` are supported. Every class requires at
+least two samples, and each NIfTI must be a 3D volume.
 
-این README می‌تواند به عنوان یک **مستندات کامل** برای پروژه شما استفاده شود. اگر نیاز به تغییرات یا افزودن بخش‌های خاصی دارید، بگویید تا ویرایش کنم!
+```csv
+path,label
+BraTS20_Training_001/BraTS20_Training_001_flair.nii.gz,grade_a
+BraTS20_Training_002/BraTS20_Training_002_flair.nii.gz,grade_b
+```
+
+```bash
+python Brain_Tumor_CNN.py --data-mode nifti --dataset-path data --labels-csv labels.csv
+```
+
+The NIfTI loader selects a high-foreground axial slice and uses robust 1st–99th
+percentile normalization. This is deliberately simple; a clinically meaningful
+3D model should preserve the volume and use patient-level external validation.
+
+Each class needs at least two files. The validation set must also be large
+enough to contain every class; the script stops with a clear message if a
+stratified split would be invalid. During training, automatic class weights
+reduce the effect of class imbalance.
+
+## Outputs
+
+By default, files are written to `artifacts/`:
+
+* `best_model.keras` and `final_model.keras`
+* `label_map.json` — the exact class-to-output-index mapping
+* `evaluation.json` — class counts, class weights, confusion matrix, per-class metrics, accuracy
+* `plots/training_history.png`
+
+Use `--output-dir results/run-01` to keep runs separate. Set `--weights none`
+when working offline (ImageNet weights otherwise download on first use).
+
+## Checks
+
+```bash
+python -m unittest discover -s tests -v
+python -m py_compile Brain_Tumor_CNN.py
+```
