@@ -63,6 +63,26 @@ enough to contain every class; the script stops with a clear message if a
 stratified split would be invalid. During training, automatic class weights
 reduce the effect of class imbalance.
 
+## Google Colab (recommended for training)
+
+Open `latest_version(for_google_colab).ipynb` in Colab, choose **Runtime →
+Change runtime type → T4 GPU** if available, mount Drive, and set `PROJECT` in
+the notebook to the uploaded repository folder. Run the setup and checks cell.
+Keep the dataset and output directory on Drive so they survive Colab session
+restarts. Use one training command from the notebook and edit its paths to your
+Drive folders. Start with `--fine-tune-layers 0` and batch size 4 or 8; use the
+optional `--fine-tune-layers 20` only after the first run fits in memory.
+
+The current Colab notebook is only a launcher and usage guide; model logic is
+maintained solely in `Brain_Tumor_CNN.py`. Don't run a separate old notebook
+cell that derives labels from BraTS folder names.
+
+For multiple images or slices from the same patient, pass `--patient-csv` with
+`path,patient_id` columns. This keeps each patient entirely in either training
+or validation and avoids an overly optimistic score caused by slice leakage.
+Without patient IDs, the default split is at image/volume level and must not be
+interpreted as patient-independent evaluation.
+
 ## Outputs
 
 By default, files are written to `artifacts/`:
@@ -74,6 +94,17 @@ By default, files are written to `artifacts/`:
 
 Use `--output-dir results/run-01` to keep runs separate. Set `--weights none`
 when working offline (ImageNet weights otherwise download on first use).
+
+Predict one ordinary image using artifacts from the same run:
+
+```bash
+python Brain_Tumor_CNN.py --predict-image data/example.png \
+  --model-path artifacts/best_model.keras --label-map artifacts/label_map.json
+```
+
+This returns the model's class scores, not a tumor location or a clinical
+diagnosis. A classifier trained on 2D images cannot locate a tumor; use a
+segmentation model and reviewed masks for localization.
 
 ## Checks
 
