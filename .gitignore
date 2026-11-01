@@ -6,4 +6,4 @@ artifacts/
 *.h5
 *.tflite
 *.npy
-‫*‬.venv
+.venv/

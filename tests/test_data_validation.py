@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 from Brain_Tumor_CNN import (
     collect_image_samples, collect_nifti_samples, is_nifti_file,
-    load_nifti_slice, predict_image, read_patient_ids, validate_samples,
+    load_nifti_slice, predict_image, read_patient_ids, split_samples, validate_samples,
 )
 
 
@@ -67,6 +67,54 @@ class DataValidationTests(unittest.TestCase):
                 writer.writerow({"path": "other.png", "patient_id": "patient-1"})
             with self.assertRaisesRegex(ValueError, "missing 1 sample"):
                 read_patient_ids(manifest, [root / "scan.png"], root)
+
+    def test_patient_manifest_rejects_duplicate_paths(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            sample = root / "scan.png"
+            sample.touch()
+            manifest = root / "patients.csv"
+            with manifest.open("w", newline="") as file:
+                writer = csv.DictWriter(file, fieldnames=["path", "patient_id"])
+                writer.writeheader()
+                writer.writerow({"path": "scan.png", "patient_id": "patient-1"})
+                writer.writerow({"path": "scan.png", "patient_id": "patient-2"})
+            with self.assertRaisesRegex(ValueError, "Duplicate sample path"):
+                read_patient_ids(manifest, [sample], root)
+
+    def test_patient_split_never_shares_a_patient_between_partitions(self):
+        class FakeGroupSplitter:
+            def __init__(self, **_kwargs):
+                pass
+
+            def split(self, _paths, _labels, groups):
+                if groups != ["p1", "p1", "p2", "p2"]:
+                    raise AssertionError("Unexpected patient groups")
+                yield [0, 1], [2, 3]
+
+        paths = [Path(f"sample-{index}.png") for index in range(4)]
+        train_paths, validation_paths, y_train, y_validation = split_samples(
+            paths, [0, 1, 0, 1], ["p1", "p1", "p2", "p2"], 0.5, 42, 2,
+            FakeGroupSplitter, None,
+        )
+        self.assertEqual(train_paths, paths[:2])
+        self.assertEqual(validation_paths, paths[2:])
+        self.assertEqual(y_train, [0, 1])
+        self.assertEqual(y_validation, [0, 1])
+
+    def test_patient_split_turns_splitter_error_into_a_helpful_message(self):
+        class FailingGroupSplitter:
+            def __init__(self, **_kwargs):
+                pass
+
+            def split(self, *_args, **_kwargs):
+                raise ValueError("invalid groups")
+
+        with self.assertRaisesRegex(ValueError, "enough distinct patients"):
+            split_samples(
+                [Path("a"), Path("b")], [0, 1], ["p1", "p2"], 0.5, 42, 2,
+                FailingGroupSplitter, None,
+            )
 
     def test_nifti_loader_rejects_singleton_fourth_dimension(self):
         try:

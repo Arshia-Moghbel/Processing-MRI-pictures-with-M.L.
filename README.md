@@ -4,9 +4,13 @@ An executable baseline for **labelled** brain-MRI classification. It trains a
 frozen ResNet50 classifier, creates a stratified validation split, saves the
 best/final model, metrics, and training plot in an output directory.
 
+> **Status:** Complete reproducible baseline. It is intentionally not a clinical product.
+
 > This is a research/education project, not a clinical diagnostic tool. Never
 > use its predictions for patient care without appropriate validation,
 > governance, and regulatory review.
+
+> **Status:** 🚧 In Active Development
 
 ## Important data note
 
@@ -16,13 +20,16 @@ healthy controls. A binary "tumour/no tumour" model cannot be trained from
 those folder names. For classification, supply an auditable label manifest; for
 BraTS tumour masks, build a segmentation workflow instead.
 
-## Setup
+## Local setup
 
 ```bash
-python -m venv .venv
+python3.12 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 ```
+
+No package is installed outside `.venv`. Python 3.12 is the tested local
+interpreter for this project; Google Colab supplies its own compatible runtime.
 
 ## Train from ordinary images
 
@@ -51,7 +58,7 @@ BraTS20_Training_002/BraTS20_Training_002_flair.nii.gz,grade_b
 ```
 
 ```bash
-python Brain_Tumor_CNN.py --data-mode nifti --dataset-path data --labels-csv labels.csv
+python Brain_Tumor_CNN.py --data-mode nifti --dataset-path data --labels-csv data/labels.csv
 ```
 
 The NIfTI loader selects a high-foreground axial slice and uses robust 1st–99th
@@ -63,19 +70,58 @@ enough to contain every class; the script stops with a clear message if a
 stratified split would be invalid. During training, automatic class weights
 reduce the effect of class imbalance.
 
-## Google Colab (recommended for training)
+## Google Colab: complete training guide
 
-Open `latest_version(for_google_colab).ipynb` in Colab, choose **Runtime →
-Change runtime type → T4 GPU** if available, mount Drive, and set `PROJECT` in
-the notebook to the uploaded repository folder. Run the setup and checks cell.
-Keep the dataset and output directory on Drive so they survive Colab session
-restarts. Use one training command from the notebook and edit its paths to your
-Drive folders. Start with `--fine-tune-layers 0` and batch size 4 or 8; use the
-optional `--fine-tune-layers 20` only after the first run fits in memory.
+1. Open [the Colab notebook](https://colab.research.google.com/github/Arshia-Moghbel/Processing-MRI-pictures-with-M.L./blob/main/brain_tumor_classifier_colab.ipynb).
+   In Colab, select **Runtime → Change runtime type → T4 GPU** (if available),
+   then choose **Runtime → Run all**. The first cell mounts Google Drive and
+   downloads this repository to the temporary Colab machine.
+2. In Google Drive create `MyDrive/mri-data`. For 2-D images, use this exact
+   structure (class names are your labels):
 
-The current Colab notebook is only a launcher and usage guide; model logic is
-maintained solely in `Brain_Tumor_CNN.py`. Don't run a separate old notebook
-cell that derives labels from BraTS folder names.
+   ```text
+   MyDrive/mri-data/
+     no_tumor/scan_001.png
+     no_tumor/scan_002.png
+     tumor/scan_001.png
+     tumor/scan_002.png
+   ```
+
+3. In the notebook configuration cell, choose `DATA_MODE = "image"`, then run
+   its training cell. Start with `BATCH_SIZE = 4`, `EPOCHS = 12`, and
+   `FINE_TUNE_LAYERS = 0`. The notebook prints the GPU it sees before training.
+4. For NIfTI data, set `DATA_MODE = "nifti"` and create
+   `MyDrive/mri-data/labels.csv` using paths relative to `mri-data`:
+
+   ```csv
+   path,label
+   subject_001/subject_001_flair.nii.gz,grade_a
+   subject_002/subject_002_flair.nii.gz,grade_b
+   ```
+
+   The sample shown is only a format example: each class needs at least two
+   labelled volumes and the labels must be independently reviewed.
+5. If there is more than one image/volume per patient, create
+   `MyDrive/mri-data/patient_ids.csv`, set `PATIENT_CSV` in the notebook, and
+   use this format:
+
+   ```csv
+   path,patient_id
+   no_tumor/scan_001.png,patient_001
+   no_tumor/scan_002.png,patient_001
+   ```
+
+   Do not omit this file when samples from a patient repeat: otherwise the
+   reported validation score is not patient-independent.
+6. Results persist in `MyDrive/mri-artifacts/`: `best_model.keras`,
+   `final_model.keras`, `label_map.json`, `evaluation.json`, and
+   `plots/training_history.png`. To improve a baseline only after it completes
+   without memory errors, set `FINE_TUNE_LAYERS = 20` and rerun the training
+   cell. This starts a new run in the configured output folder; use a new
+   `OUTPUT_DIR` if you want to preserve the earlier run.
+
+The notebook invokes `Brain_Tumor_CNN.py`; model logic exists in one place.
+It never derives labels from BraTS folder names.
 
 For multiple images or slices from the same patient, pass `--patient-csv` with
 `path,patient_id` columns. This keeps each patient entirely in either training
@@ -95,6 +141,10 @@ By default, files are written to `artifacts/`:
 Use `--output-dir results/run-01` to keep runs separate. Set `--weights none`
 when working offline (ImageNet weights otherwise download on first use).
 
+To make the patient-level split from the command line, add
+`--patient-csv data/patient_ids.csv`. The paths inside that CSV are relative to
+`--dataset-path`, just like the NIfTI label manifest.
+
 Predict one ordinary image using artifacts from the same run:
 
 ```bash
@@ -112,3 +162,24 @@ segmentation model and reviewed masks for localization.
 python -m unittest discover -s tests -v
 python -m py_compile Brain_Tumor_CNN.py
 ```
+
+## Roadmap
+
+Completed work is checked only when it is present in the repository and covered
+by the automated checks where practical.
+
+- [x] Restore the documented command-line training program.
+- [x] Require explicit labels; do not derive a diagnosis from BraTS folder IDs.
+- [x] Support labelled 2-D images and labelled 3-D NIfTI volumes.
+- [x] Validate empty classes, malformed manifests, invalid volumes, and
+  impossible stratified splits before training.
+- [x] Add optional patient-level splits to prevent slice leakage.
+- [x] Save model, label map, evaluation metrics, and training-history plot.
+- [x] Add optional top-layer fine tuning after the frozen baseline.
+- [x] Add reproducible single-image inference with class scores.
+- [x] Keep a Colab notebook aligned with the supported data layouts.
+- [x] Add automated regression tests for validation, split safety, and inference helpers.
+
+Out of scope: clinical validation, tumour localisation/segmentation, and a
+claim of diagnostic suitability. Those require reviewed datasets, an appropriate
+3-D workflow, external validation, and clinical/regulatory governance.
