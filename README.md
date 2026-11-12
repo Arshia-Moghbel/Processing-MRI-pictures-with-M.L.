@@ -4,7 +4,6 @@ An executable baseline for **labelled** brain-MRI classification. It trains a
 frozen ResNet50 classifier, creates a stratified validation split, saves the
 best/final model, metrics, and training plot in an output directory.
 
-> **Status:** Complete reproducible baseline. It is intentionally not a clinical product.
 
 > This is a research/education project, not a clinical diagnostic tool. Never
 > use its predictions for patient care without appropriate validation,
@@ -183,3 +182,9 @@ by the automated checks where practical.
 Out of scope: clinical validation, tumour localisation/segmentation, and a
 claim of diagnostic suitability. Those require reviewed datasets, an appropriate
 3-D workflow, external validation, and clinical/regulatory governance.
+
+![Python](https://img.shields.io/badge/Python-3.12-blue)
+![TensorFlow](https://img.shields.io/badge/TensorFlow-Deep%20Learning-orange)
+![ResNet50](https://img.shields.io/badge/Model-ResNet50-red)
+![License](https://img.shields.io/badge/License-GPL--3.0-blue)
+![Platform](https://img.shields.io/badge/Platform-Google%20Colab-green)
